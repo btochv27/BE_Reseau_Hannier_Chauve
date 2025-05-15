@@ -23,7 +23,6 @@ int PA = 0;
  */
 int mic_tcp_socket(start_mode sm)
 {
-   int result = -1;
    printf("[MIC-TCP] Appel de la fonction: ");  printf(__FUNCTION__); printf("\n");
    result = initialize_components(sm); /* Appel obligatoire */
    set_loss_rate(0);
@@ -187,5 +186,4 @@ void process_received_PDU(mic_tcp_pdu pdu, mic_tcp_ip_addr local_addr, mic_tcp_i
     printf("[MIC-TCP] Appel de la fonction: "); printf(__FUNCTION__); printf("\n");
 	app_buffer_put(pdu.payload);
 	PA=(PA+1)%2;
-	return 1;
 }
