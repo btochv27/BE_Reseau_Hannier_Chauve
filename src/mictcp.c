@@ -3,9 +3,21 @@
 #define MAX_SOCKET 12
 #define MAX_TIME_WAIT 500
 int compteur_socket;
-mic_tcp_sock tab_sock[MAX_SOCKET];
+mic_tcp_sock* tab_sock=init_tab_sock();
 int PE =0;
 int PA = 0;
+
+mic_tcp_sock* init_tab_sock(){
+    mic_tcp_sock init_tab[MAX_SOCKET];
+    for(int i=0; i<MAX_SOCKET; i++){
+        init_tab[i].fd=-1;
+        init_tab[i].local_addr=NULL;
+        init_tab[i].remote_addr=NULL;
+        init_tab[i].state=NULL;
+    }
+
+}
+
 /*
  * Permet de créer un socket entre l’application et MIC-TCP
  * Retourne le descripteur du socket ou bien -1 en cas d'erreur
@@ -147,7 +159,6 @@ int mic_tcp_recv (int socket, char* mesg, int max_mesg_size)
     return app_buffer_get(payload);
 }
 
-}
 
 /*
  * Permet de réclamer la destruction d’un socket.
