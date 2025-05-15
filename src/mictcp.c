@@ -65,7 +65,23 @@ int mic_tcp_send (int mic_sock, char* mesg, int mesg_size)
 int mic_tcp_recv (int socket, char* mesg, int max_mesg_size)
 {
     printf("[MIC-TCP] Appel de la fonction: "); printf(__FUNCTION__); printf("\n");
-    return -1;
+    mic_tcp_pdu pdu;
+    mic_tcp_pdu ack;
+
+	mic_tcp_payload payload;
+	payload.data = mesg;
+	payload.size = max_mesg_size;
+	IP_recv(&pdu,&tab_socket[socket].addr,null);
+	switch(process_received_PDU(pdu,tab_socket[socket].addr)){
+		case -1 :
+        return -1;
+    default: 
+        Ack.ack_num = pdu.num_seq;
+        break;
+    IP_send(&ack,&tab_socket[socket].remote_addr);
+    return app_buffer_get(payload);
+}
+
 }
 
 /*
@@ -76,7 +92,13 @@ int mic_tcp_recv (int socket, char* mesg, int max_mesg_size)
 int mic_tcp_close (int socket)
 {
     printf("[MIC-TCP] Appel de la fonction :  "); printf(__FUNCTION__); printf("\n");
-    return -1;
+    if(socket>MAX_SOCKET or socket<0){
+        printf("Exception : socket out of bound\n");
+        return -1;
+    }
+	compteur_socket--;
+    tab_sock[socket]=NULL;
+    return 1; 	
 }
 
 /*
@@ -88,4 +110,15 @@ int mic_tcp_close (int socket)
 void process_received_PDU(mic_tcp_pdu pdu, mic_tcp_ip_addr local_addr, mic_tcp_ip_addr remote_addr)
 {
     printf("[MIC-TCP] Appel de la fonction: "); printf(__FUNCTION__); printf("\n");
+    if(pdu.header.dest_port!=local_addr.port or pdu.header.source_port!=remote_addr.port){
+        printf("port PDU incorrect\n");
+        return -1;
+    }
+    if(pdu.seq_num!=PA){
+        printf("numéro de sequence incorrect\n");
+        return -2;
+    }
+	app_buffer_put(pdu.payload);
+	PA=(PA+1)%2
+	return 1;
 }
