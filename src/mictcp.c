@@ -142,14 +142,14 @@ int mic_tcp_recv (int socket, char* mesg, int max_mesg_size)
 	payload.data = mesg;
 	payload.size = max_mesg_size;
 	IP_recv(&pdu,&tab_sock[socket].local_addr.ip_addr,&tab_sock[socket].remote_addr.ip_addr,NULL);
-    if(pdu.header.dest_port!=local_addr.port || pdu.header.source_port!=remote_addr.port){
+    if(pdu.header.dest_port!=tab_sock[socket].local_addr.port || pdu.header.source_port!=&tab_sock[socket].remote_addr.port){
         printf("port PDU incorrect\n");
         return -1;
     }
 
     ack.header.ack_num = pdu.header.seq_num;
     
-    IP_send(ack,&tab_sock[socket].remote_addr.ip_addr);
+    IP_send(ack,tab_sock[socket].remote_addr.ip_addr);
     if(pdu.header.seq_num!=PA){
         printf("numéro de sequence incorrect\n");
         return -2;
