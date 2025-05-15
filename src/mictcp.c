@@ -1,7 +1,11 @@
 #include <mictcp.h>
 #include <api/mictcp_core.h>
-
-
+#define MAX_SOCKET 12
+#define MAX_TIME_WAIT 500
+int compteur_socket;
+mic_tcp_sock tab_sock[MAX_SOCKET];
+int PE =0;
+int PA = 0;
 /*
  * Permet de créer un socket entre l’application et MIC-TCP
  * Retourne le descripteur du socket ou bien -1 en cas d'erreur
@@ -12,8 +16,23 @@ int mic_tcp_socket(start_mode sm)
    printf("[MIC-TCP] Appel de la fonction: ");  printf(__FUNCTION__); printf("\n");
    result = initialize_components(sm); /* Appel obligatoire */
    set_loss_rate(0);
-
-   return result;
+    compteur_socket++;
+    if(compteur_socket>MAX_SOCKET){
+        printf("Exception raised: too much socket\n");
+        return -1;
+    }
+    int i =0;
+    while(tab_sock[i]!=NULL){
+        i++;
+        if(i>MAX_SOCKET){
+            printf("Unexpected Exception : tab_sock full\n");
+            return -1;
+        }
+    }
+    mic_tcp_sock sock;
+    sock.fd = i;
+    tab_sock[i] = sock;
+   return i;
 }
 
 /*
@@ -23,7 +42,15 @@ int mic_tcp_socket(start_mode sm)
 int mic_tcp_bind(int socket, mic_tcp_sock_addr addr)
 {
    printf("[MIC-TCP] Appel de la fonction: ");  printf(__FUNCTION__); printf("\n");
-   return -1;
+    short port = addr.port;
+    for(int i =0; i<MAX_SOCKET; i++){
+        if(tab_sock[i].addr.port==port){
+            printf("Port deja attribué \n");
+            return -1;
+        }
+    }
+    tab_sock[socket].local_addr = addr;
+   return 0;
 }
 
 /*
@@ -33,7 +60,9 @@ int mic_tcp_bind(int socket, mic_tcp_sock_addr addr)
 int mic_tcp_accept(int socket, mic_tcp_sock_addr* addr)
 {
     printf("[MIC-TCP] Appel de la fonction: ");  printf(__FUNCTION__); printf("\n");
-    return -1;
+    tab_sock[socket].state = protocol_state.IDLE;
+    // on utilise pas en v1 l'addresse
+    return 0;
 }
 
 /*
@@ -43,7 +72,9 @@ int mic_tcp_accept(int socket, mic_tcp_sock_addr* addr)
 int mic_tcp_connect(int socket, mic_tcp_sock_addr addr)
 {
     printf("[MIC-TCP] Appel de la fonction: ");  printf(__FUNCTION__); printf("\n");
-    return -1;
+    // stock l'addresse et le port passé en paramettre dans la structure
+    tab_sock[socket].remote_addr = addr;
+    return 0;
 }
 
 /*
@@ -53,7 +84,34 @@ int mic_tcp_connect(int socket, mic_tcp_sock_addr addr)
 int mic_tcp_send (int mic_sock, char* mesg, int mesg_size)
 {
     printf("[MIC-TCP] Appel de la fonction: "); printf(__FUNCTION__); printf("\n");
-    return -1;
+    mic_tcp_pdu pdu;
+    pdu.payload.data = mesg;
+    pdu.payload.size = mesg_size;
+    pdu.header.seq_num = PE;
+    pdu.header.source_port = tab_sock[mic_sock].local_addr.port;
+    pdu.header.dest_port = tab_sock[mic_sock].remote_addr.port;
+    //phase d'attente
+    int done = 0;
+    while(!done){
+        //Envoyer un message (dont la taille et le contenu sont passé en paramettre)
+        printf("envoie du paquet \n");
+        int size_sent = IP_send(pdu,tab_sock[socket].remote_addr);
+        unsigned long t1 = get_now_time_msec();
+        while(t1-get_now_time_msec()<MAX_TIME_WAIT){
+            printf("attente du ack\n");
+            mic_tcp_pdu ack;
+            int size = IP_recv(&ack,&tab_socket[socket].local_addr,MAX_TIME_TO_WAIT-(t1-get_now_time()));
+            if(size != -1){
+                if(ack.header.ack_num==pdu.header.seq_num){
+                    printf("bon ack reçu \n");
+                    PE=(PE+1)%2;
+                    done = 1;
+                    break;
+                }
+            }
+        }
+    }
+    return sent_size;
 }
 
 /*
