@@ -24,7 +24,7 @@ int PA = 0;
 int mic_tcp_socket(start_mode sm)
 {
    printf("[MIC-TCP] Appel de la fonction: ");  printf(__FUNCTION__); printf("\n");
-   result = initialize_components(sm); /* Appel obligatoire */
+   int result = initialize_components(sm); /* Appel obligatoire */
    set_loss_rate(0);
     compteur_socket++;
     if(compteur_socket>MAX_SOCKET){
