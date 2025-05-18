@@ -109,7 +109,7 @@ int mic_tcp_send (int mic_sock, char* mesg, int mesg_size)
     //phase d'attente
     int done = 0;
     int size_sent = -1;
-    while(!done){
+    //while(!done){
         //Envoyer un message (dont la taille et le contenu sont passé en paramettre)
         printf("envoie du paquet \n");
         size_sent = IP_send(pdu,tab_sock[mic_sock].remote_addr.ip_addr);
@@ -129,7 +129,7 @@ int mic_tcp_send (int mic_sock, char* mesg, int mesg_size)
             }
         }
             */
-    }
+    //}
     return size_sent;
 }
 
@@ -150,9 +150,8 @@ int mic_tcp_recv (int socket, char* mesg, int max_mesg_size)
 	payload.size = max_mesg_size;
     int size_ret = -1;
 
-    //faire process receive pdu avant 
     while(size_ret<1){
-	    size_ret = app_buffer_get(&payload);
+	    size_ret = app_buffer_get(payload);
     }
     
     return size_ret;
@@ -185,20 +184,21 @@ int mic_tcp_close (int socket)
 void process_received_PDU(mic_tcp_pdu pdu, mic_tcp_ip_addr local_addr, mic_tcp_ip_addr remote_addr)
 {
     printf("[MIC-TCP] Appel de la fonction: "); printf(__FUNCTION__); printf("\n");
-
-    if(pdu.header.dest_port!=tab_sock[socket].local_addr.port || pdu.header.source_port!=&tab_sock[socket].remote_addr.port){
+    /*
+    if(pdu.header.dest_port!=local_addr.port || pdu.header.source_port!=remote_addr.port){
         printf("port PDU incorrect\n");
         return -1;
     }
-
-    ack.header.ack_num = pdu.header.seq_num;
+    */
+    //ack.header.ack_num = pdu.header.seq_num;
     
-    IP_send(ack,tab_sock[socket].remote_addr.ip_addr);
+    //IP_send(ack,remote_addr.ip_addr);
+    /*
     if(pdu.header.seq_num!=PA){
         printf("numéro de sequence incorrect\n");
         return -2;
     }
-
+    */
 	app_buffer_put(pdu.payload);
 	PA=(PA+1)%2;
 }
