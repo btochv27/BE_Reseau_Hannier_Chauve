@@ -128,7 +128,7 @@ int mic_tcp_send (int mic_sock, char* mesg, int mesg_size)
                     PE=(PE+1)%2;
                     done = 1;
                     break;
-                }
+                
             }
         }
     }
