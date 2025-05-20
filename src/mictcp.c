@@ -4,15 +4,7 @@
 #define MAX_TIME_WAIT 500
 int compteur_socket;
 
-void init_tab_sock(mic_tcp_sock* tab){
-    
-    for(int i=0; i<MAX_SOCKET; i++){
-        tab[i].fd=-1;
-    }
-}
-
 mic_tcp_sock tab_sock[MAX_SOCKET];
-//init_tab_sock(tab_sock);
 int PE =0;
 int PA = 0;
 int is_ini =0;
@@ -119,30 +111,23 @@ int mic_tcp_send (int mic_sock, char* mesg, int mesg_size)
     int done = 0;
     while(!done){
         //Envoyer un message (dont la taille et le contenu sont passé en paramettre)
-        //printf("envoie du paquet \n");
+        mic_tcp_ip_addr local_ip;
+        mic_tcp_ip_addr remote_ip;
         mic_tcp_pdu ack;
         ack.payload.data = malloc(8);
         ack.payload.size = 8;
         size_sent = IP_send(pdu,tab_sock[mic_sock].remote_addr.ip_addr);
         unsigned long t1 = get_now_time_msec();
+
         while(t1-get_now_time_msec()<MAX_TIME_WAIT){
-            //printf("attente du ack\n");
-            mic_tcp_ip_addr local_ip;
-
-            mic_tcp_ip_addr remote_ip;
-
             int size = IP_recv(&ack,&local_ip,&remote_ip,MAX_TIME_WAIT);
             if(size == -1){
                 perror("erreur recv ");
             }
-            if(size != -1){
-                if(ack.header.ack){
-                    if(ack.header.ack_num==pdu.header.seq_num){
-                        //printf("bon ack reçu \n");
-                        PE=(PE+1)%2;
-                        done = 1;
-                        break;
-                    }
+            else if(ack.header.ack && ack.header.ack_num==pdu.header.seq_num){
+                    PE=(PE+1)%2;
+                    done = 1;
+                    break;
                 }
             }
         }
@@ -207,13 +192,8 @@ void process_received_PDU(mic_tcp_pdu pdu, mic_tcp_ip_addr local_addr, mic_tcp_i
     ack.header.ack_num = pdu.header.seq_num;
     
     IP_send(ack,remote_addr);
-    //printf("PE = %d et PA = %d",pdu.header.seq_num,PA);
-    if(pdu.header.seq_num!=PA){
-        
-        return ;
+    if(pdu.header.seq_num==PA){
+        PA=(PA+1)%2;
+	    app_buffer_put(pdu.payload);
     }
-
-    PA=(PA+1)%2;
-	app_buffer_put(pdu.payload);
-	
 }
