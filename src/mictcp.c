@@ -16,6 +16,7 @@ int index_f = 0;
 char fenetre [TAILLEF]; //retien les pdu envoyé ou non (sous forme vrai ou faux)
 
 /*
+ *
  * Permet de créer un socket entre l’application et MIC-TCP
  * Retourne le descripteur du socket ou bien -1 en cas d'erreur
  */
