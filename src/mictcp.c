@@ -1,6 +1,7 @@
 #include <mictcp.h>
 #include <api/mictcp_core.h>
 #define MAX_SOCKET 12
+#define MAX_SYNACK_RESEND 10
 #define MAX_TIME_WAIT 500
 #define TAILLEF 10
 int compteur_socket;
@@ -82,11 +83,49 @@ int mic_tcp_bind(int socket, mic_tcp_sock_addr addr)
 int mic_tcp_accept(int socket, mic_tcp_sock_addr* addr)
 {
     printf("[MIC-TCP] Appel de la fonction: ");  printf(__FUNCTION__); printf("\n");
-    tab_sock[socket].state = IDLE;
-    // on utilise pas en v1 l'addresse
+    mic_tcp_sock sock=tab_sock[socket];
+    sock.state = IDLE;
+
+    //Attente SYN
+    mic_tcp_pdu syn;
+    mic_tcp_ip_addr local_ip;
+    while(sock.state != ESTABLISHED){
+        int size = IP_recv(&syn,&local_ip,&(addr->ip_addr), MAX_TIME_WAIT);
+        if(size == -1){
+            perror("erreur recv ");
+        }else if(syn.header.syn){
+            sock.state=SYN_RECEIVED;
+            int synack_resend=0;
+            while(sock.state != ESTABLISHED && synack_resend<MAX_SYNACK_RESEND){
+                //Envoie SYN+ACK
+                mic_tcp_pdu synack;
+                synack.header.ack=1;
+                synack.header.syn=1;
+                synack.payload.data = malloc(8);
+                synack.payload.size = 8;
+                int size_sent = IP_send(synack,addr->ip_addr);
+                if (size_sent==-1){perror("ERREUR SEND SYNACK");}
+                //Attente ACK
+                unsigned long t1 = get_now_time_msec();
+                mic_tcp_pdu ack;
+                ack.payload.data = malloc(8);
+                ack.payload.size = 8;
+                while(t1-get_now_time_msec()<MAX_TIME_WAIT){
+                    size = IP_recv(&ack,&local_ip,&(addr->ip_addr),MAX_TIME_WAIT);
+                    if(size == -1){
+                            perror("erreur recv ");
+                    }else if(ack.header.ack){
+                        PE=ack.header.seq_num+1;
+                        tab_sock[socket].state = ESTABLISHED;
+                        break;
+                    }      
+                }
+            synack_resend++;
+            }
+        }
+    }
     return 0;
 }
-
 /*
  * Permet de réclamer l’établissement d’une connexion
  * Retourne 0 si la connexion est établie, et -1 en cas d’échec
