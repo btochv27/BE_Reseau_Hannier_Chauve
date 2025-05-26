@@ -161,7 +161,7 @@ int mic_tcp_send (int mic_sock, char* mesg, int mesg_size)
             index_f = (index_f + 1)%TAILLEF;
             if(verificationFenetre()){
                 done = 1;
-                printf("[MIC-TCP] Paquet non renvoyé \n");
+                printf("[MIC-TCP] Paquet non renvoyé !\n");
             }
         }
     }
