@@ -2,6 +2,7 @@
 #include <api/mictcp_core.h>
 #define MAX_SOCKET 12
 #define MAX_TIME_WAIT 500
+#define TAILLEF 10
 int compteur_socket;
 
 mic_tcp_sock tab_sock[MAX_SOCKET];
@@ -9,6 +10,10 @@ int PE =0;
 int PA = 0;
 int is_ini =0;
 
+
+float t_perte = 0.7;
+int index_f = 0;
+char fenetre [TAILLEF]; //retien les pdu envoyé ou non (sous forme vrai ou faux)
 
 /*
  * Permet de créer un socket entre l’application et MIC-TCP
@@ -18,7 +23,9 @@ int mic_tcp_socket(start_mode sm)
 {
     if(is_ini ==0){
         printf("loss rate mis \n");
-        
+        for (int i = 0; i <TAILLEF; i++){
+            fenetre[i] = 1;
+        }
         for(int i=0; i<MAX_SOCKET; i++){
             tab_sock[i].fd=-1;
         }
@@ -92,13 +99,29 @@ int mic_tcp_connect(int socket, mic_tcp_sock_addr addr)
 }
 
 /*
+ * Verifie si le pourcentage d'erreur est acceptable
+ * Retourne 0 s'il ne l'est pas, 1 sinon.
+ */
+char verificationFenetre(){
+    int nbreussi = 0;
+    for (int i = 0; i < TAILLEF; i++){
+        nbreussi = nbreussi + fenetre[i];
+    }
+    float pourcenRecup = ((float)nbreussi)/((float)TAILLEF);
+    printf("[MIC-TCP] Pourcentage perte sur fenetre glissante : %f \n",pourcenRecup);
+    return (pourcenRecup>t_perte);
+}
+
+
+
+/*
  * Permet de réclamer l’envoi d’une donnée applicative
  * Retourne la taille des données envoyées, et -1 en cas d'erreur
  */
 int mic_tcp_send (int mic_sock, char* mesg, int mesg_size)
 {
     printf("[MIC-TCP] Appel de la fonction: "); printf(__FUNCTION__); printf("\n");
-    set_loss_rate(50);
+    set_loss_rate(15);
     mic_tcp_pdu pdu;
     pdu.payload.data = mesg;
     pdu.payload.size = mesg_size;
@@ -126,9 +149,19 @@ int mic_tcp_send (int mic_sock, char* mesg, int mesg_size)
             }
             else if(ack.header.ack && ack.header.ack_num==pdu.header.seq_num){
                     PE=(PE+1)%2;
+                    fenetre[index_f] = 1;
+                    index_f = (index_f + 1)%TAILLEF;
                     done = 1;
                     break;
                 
+            }
+        }
+        if(!done){
+            fenetre[index_f]=0;
+            index_f = (index_f + 1)%TAILLEF;
+            if(verificationFenetre()){
+                done = 1;
+                printf("[MIC-TCP] Paquet non renvoyé \n");
             }
         }
     }
@@ -186,7 +219,7 @@ int mic_tcp_close (int socket)
 void process_received_PDU(mic_tcp_pdu pdu, mic_tcp_ip_addr local_addr, mic_tcp_ip_addr remote_addr)
 {
     printf("[MIC-TCP] Appel de la fonction: "); printf(__FUNCTION__); printf("\n");
-    set_loss_rate(50);
+    set_loss_rate(15);
     mic_tcp_pdu ack;
     ack.header.ack=1;
     ack.header.ack_num = pdu.header.seq_num;
