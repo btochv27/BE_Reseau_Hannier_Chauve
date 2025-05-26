@@ -96,6 +96,41 @@ int mic_tcp_connect(int socket, mic_tcp_sock_addr addr)
     printf("[MIC-TCP] Appel de la fonction: ");  printf(__FUNCTION__); printf("\n");
     // stock l'addresse et le port passé en paramettre dans la structure
     tab_sock[socket].remote_addr = addr;
+    mic_tcp_pdu syn;
+    syn.header.seq_num = PE;
+    syn.header.syn = 1;
+    syn.header.source_port = tab_sock[socket].local_addr.port;
+    syn.header.dest_port = tab_sock[socket].remote_addr.port;
+    
+    //attente ACK
+    int size_sent = -1;
+    int done = 0;
+    while(!done){
+        mic_tcp_ip_addr local_ip;
+        mic_tcp_ip_addr remote_ip;
+        mic_tcp_pdu ack;
+        ack.payload.data = malloc(8);
+        ack.payload.size = 8;
+        size_sent = IP_send(syn,tab_sock[socket].remote_addr.ip_addr);
+        unsigned long t1 = get_now_time_msec();
+
+        while(t1-get_now_time_msec()<MAX_TIME_WAIT){
+            int size = IP_recv(&ack,&local_ip,&remote_ip,MAX_TIME_WAIT);
+            if(size == -1){
+                perror("erreur recv ");
+            }
+            else if(ack.header.ack && ack.header.syn){
+                    done = 1;
+                    break;
+                
+            }
+        }
+    }
+    //envoie dernier ack
+    mic_tcp_pdu ack2;
+    ack2.header.ack=1;
+    IP_send(ack2,addr.ip_addr);
+
     return 0;
 }
 
