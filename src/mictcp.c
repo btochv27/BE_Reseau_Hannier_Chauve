@@ -83,47 +83,19 @@ int mic_tcp_bind(int socket, mic_tcp_sock_addr addr)
 int mic_tcp_accept(int socket, mic_tcp_sock_addr* addr)
 {
     printf("[MIC-TCP] Appel de la fonction: ");  printf(__FUNCTION__); printf("\n");
-    mic_tcp_sock sock=tab_sock[socket];
-    sock.state = IDLE;
+    protocol_state* state=&tab_sock[socket].state;
+    *state = IDLE;
 
     //Attente SYN
-    mic_tcp_pdu syn;
-    mic_tcp_ip_addr local_ip;
-    while(sock.state != ESTABLISHED){
-        int size = IP_recv(&syn,&local_ip,&(addr->ip_addr), MAX_TIME_WAIT*10);
-        if(size == -1){
-            perror("[MIC_TCP_ACCEPT] PAS DE CONNEXION DEMANDEE");
-        }else if(syn.header.syn){
-            sock.state=SYN_RECEIVED;
-            int synack_resend=0;
-            while(sock.state != ESTABLISHED && synack_resend<MAX_SYNACK_RESEND){
-                //Envoie SYN+ACK
-                mic_tcp_pdu synack;
-                synack.header.ack=1;
-                synack.header.syn=1;
-                synack.payload.data = malloc(8);
-                synack.payload.size = 8;
-                int size_sent = IP_send(synack,addr->ip_addr);
-                if (size_sent==-1){perror("[MIC_TCP_ACCEPT] ERREUR SEND SYNACK");}
-                //Attente ACK
-                unsigned long t1 = get_now_time_msec();
-                mic_tcp_pdu ack;
-                ack.payload.data = malloc(8);
-                ack.payload.size = 8;
-                while(t1-get_now_time_msec()<MAX_TIME_WAIT){
-                    size = IP_recv(&ack,&local_ip,&(addr->ip_addr),MAX_TIME_WAIT);
-                    if(size == -1){
-                            perror("[MIC_TCP_ACCEPT] PAS DE ACK RECU");
-                    }else if(ack.header.ack){
-                        PE=ack.header.seq_num+1;
-                        tab_sock[socket].state = ESTABLISHED;
-                        break;
-                    }      
-                }
-            synack_resend++;
-            }
-        }
-    }
+    //printf("[------------DEBUG----------] ATTENTE SYN...\n");
+    while(*state!=SYN_RECEIVED){}// ATTENTE SYN
+
+
+    //Attente ACK
+    //printf("[------------DEBUG----------] ATTENTE ACK... \n");
+    while(*state!=ESTABLISHED){}// ATTENTE ACK
+
+    printf("[MIC_TCP_ACCEPT] CONNEXION ETABLIE ✅\n\n");
     return 0;
 }
 /*
@@ -135,50 +107,63 @@ int mic_tcp_connect(int socket, mic_tcp_sock_addr addr)
     printf("[MIC-TCP] Appel de la fonction: ");  printf(__FUNCTION__); printf("\n");
     // stock l'addresse et le port passé en paramettre dans la structure
     tab_sock[socket].remote_addr = addr;
+    protocol_state* state=&tab_sock[socket].state;
     
-    
-    //attente ACK
-    while(!(tab_sock[socket].state==ESTABLISHED)){
+    //Envoi SYN
+    mic_tcp_pdu syn;
+    syn.header.seq_num = PE;
+    printf("[------------DEBUG----------] SEQ_NUM envoie SYN : %d\n", syn.header.seq_num);
+    PA=(PE+1)%2;
+    syn.header.syn = 1;
+    syn.header.source_port = 6500;
+    syn.header.dest_port = tab_sock[socket].remote_addr.port;
+    syn.payload.data = malloc(8);
+    syn.payload.size = 8;
+    int size_sent = IP_send(syn,addr.ip_addr);
+    if(size_sent == -1){perror("[MIC_TCP_CONNECT] ERREUR SEND SYN");
+    }else{ //CHANGEMENT D'ETAT A SYN_SENT POUR ATTENDRE LE SYNACK
+        *state=SYN_SENT;
+    } 
+    printf("[------------DEBUG----------] SYN ENVOYE !\n");
+
+
+    while(*state!=ESTABLISHED){ // ATTENTE SYNACK
         mic_tcp_ip_addr local_ip;
         mic_tcp_ip_addr remote_ip;
-        
-        mic_tcp_pdu syn;
-        syn.header.seq_num = PE;
-        syn.header.syn = 1;
-        syn.header.source_port = 6500;
-        syn.header.dest_port = tab_sock[socket].remote_addr.port;
-        syn.payload.data = malloc(8);
-        syn.payload.size = 8;
-        int size_sent = IP_send(syn,addr.ip_addr);
-        if(size_sent == -1){
-            perror("[MIC_TCP_CONNECT] ERREUR SEND SYN");
-        }else{tab_sock[socket].state=SYN_SENT;}
-        unsigned long t1 = get_now_time_msec();
-
-
         mic_tcp_pdu synack;
         synack.payload.data = malloc(8);
         synack.payload.size = 8;
-        while(t1-get_now_time_msec()<MAX_TIME_WAIT){
+        unsigned long t1 = get_now_time_msec();
 
+        while(t1-get_now_time_msec()<MAX_TIME_WAIT){
             int size = IP_recv(&synack,&local_ip,&remote_ip,MAX_TIME_WAIT);
             if(size == -1){
-                perror("[MIC_TCP_CONNECT] PAS DE SYN-ACK RECU");
+                perror("erreur recv ");
             }
             else if(synack.header.ack && synack.header.syn){
-                    tab_sock[socket].state=ESTABLISHED;
+                    printf("[----------DEBUG------------] SEQ_NUM recep synack : %d\n", synack.header.seq_num);
+                    PE=(PE+1)%2;
+                    *state=ESTABLISHED;
                     break;
                 
             }
         }
     }
-    //envoie dernier ack
+    printf("[------------DEBUG----------] SYNACK RECU !\n");
+    
+    //Envoi dernier ack
     mic_tcp_pdu ack;
     ack.header.ack=1;
+    ack.header.seq_num=PA;
+    ack.header.source_port = 6500;
+    ack.header.dest_port = tab_sock[socket].remote_addr.port;
     ack.payload.data = malloc(8);
     ack.payload.size = 8;
     IP_send(ack,addr.ip_addr);
+    printf("[------------DEBUG----------] ACK ENVOYE !\n");
 
+
+    printf("[MIC_TCP_CONNECT] CONNEXION ETABLIE ✅\n\n"); //Non c'est pas chat gpt, je suis allé chercher cet emoji moi meme sur le net
     return 0;
 }
 
@@ -220,6 +205,8 @@ int mic_tcp_send (int mic_sock, char* mesg, int mesg_size)
         //Envoyer un message (dont la taille et le contenu sont passé en paramettre)
         mic_tcp_ip_addr local_ip;
         mic_tcp_ip_addr remote_ip;
+        remote_ip.addr=malloc(16);
+        remote_ip.addr_size=16;
         mic_tcp_pdu ack;
         ack.payload.data = malloc(8);
         ack.payload.size = 8;
@@ -304,13 +291,44 @@ void process_received_PDU(mic_tcp_pdu pdu, mic_tcp_ip_addr local_addr, mic_tcp_i
 {
     printf("[MIC-TCP] Appel de la fonction: "); printf(__FUNCTION__); printf("\n");
     set_loss_rate(15);
-    mic_tcp_pdu ack;
-    ack.header.ack=1;
-    ack.header.ack_num = pdu.header.seq_num;
-    
-    IP_send(ack,remote_addr);
-    if(pdu.header.seq_num==PA){
-        PA=(PA+1)%2;
-	    app_buffer_put(pdu.payload);
+    int sock=0;
+    while(tab_sock[sock].local_addr.port!=pdu.header.dest_port){sock++;} //trouve le socket actuel dans le tableau de socket
+    protocol_state* state=&tab_sock[sock].state;
+
+    //[CONNEXION ETABLIE]
+    if (*state==ESTABLISHED){
+
+        mic_tcp_pdu ack;
+        ack.header.ack=1;
+        ack.header.ack_num = pdu.header.seq_num;
+        IP_send(ack,remote_addr);
+        if(pdu.header.seq_num==PA){
+            PA=(PA+1)%2;
+            app_buffer_put(pdu.payload);
+        }
+
+    }else if(*state==SYN_RECEIVED && pdu.header.ack ){ //[PHASE DE CONNEXION] recep ACK
+        printf("[----------DEBUG------------] SEQ_NUM recep ack : %d | PA : %d\n", pdu.header.seq_num,PA);
+        *state=ESTABLISHED;
+        PE=(PE+1)%2;
+
+    }else if(*state!=ESTABLISHED && pdu.header.syn){//[PHASE DE CONNEXION] recep SYN
+        *state=SYN_RECEIVED;
+        PE=pdu.header.seq_num;
+        printf("[----------DEBUG------------] SEQ_NUM : recep syn %d\n", pdu.header.seq_num);
+        PA=PE;
+
+        //Envoie SYN+ACK
+        mic_tcp_pdu synack;
+        synack.header.ack=1;
+        synack.header.seq_num=PE;
+        printf("[----------DEBUG------------] SEQ_NUM envoie synack : %d\n", synack.header.seq_num);
+        synack.header.syn=1;
+        synack.payload.data = malloc(8);
+        synack.payload.size = 8;
+        int size_sent = IP_send(synack,remote_addr);
+        if (size_sent==-1){perror("[MIC_TCP_ACCEPT] ERREUR SEND SYNACK");}
+        printf("[------------DEBUG----------] SYNACK ENVOYE !\n");
     }
+    
 }
