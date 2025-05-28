@@ -1,10 +1,15 @@
 #include <mictcp.h>
 #include <api/mictcp_core.h>
+#include <pthread.h>
 #define MAX_SOCKET 12
 #define MAX_SYNACK_RESEND 10
 #define MAX_TIME_WAIT 500
 #define TAILLEF 10
 int compteur_socket;
+
+pthread_cond_t syn_condition;
+pthread_cond_t ack_condition;
+pthread_mutex_t wait_mutex;
 
 mic_tcp_sock tab_sock[MAX_SOCKET];
 int PE =0;
@@ -24,6 +29,7 @@ char fenetre [TAILLEF]; //retien les pdu envoyé ou non (sous forme vrai ou faux
 int mic_tcp_socket(start_mode sm)
 {
     if(is_ini ==0){
+        pthread_mutex_init(&wait_mutex, NULL);
         printf("loss rate mis \n");
         for (int i = 0; i <TAILLEF; i++){
             fenetre[i] = 1;
@@ -88,12 +94,14 @@ int mic_tcp_accept(int socket, mic_tcp_sock_addr* addr)
 
     //Attente SYN
     //printf("[------------DEBUG----------] ATTENTE SYN...\n");
-    while(*state!=SYN_RECEIVED){}// ATTENTE SYN
+    pthread_cond_wait(&syn_condition, &wait_mutex);// ATTENTE SYN
+    pthread_mutex_unlock(&wait_mutex);
 
 
     //Attente ACK
     //printf("[------------DEBUG----------] ATTENTE ACK... \n");
-    while(*state!=ESTABLISHED){}// ATTENTE ACK
+    pthread_cond_wait(&ack_condition, &wait_mutex);// ATTENTE ACK
+    pthread_mutex_unlock(&wait_mutex);
 
     printf("[MIC_TCP_ACCEPT] CONNEXION ETABLIE ✅\n\n");
     return 0;
@@ -154,6 +162,7 @@ int mic_tcp_connect(int socket, mic_tcp_sock_addr addr)
     //Envoi dernier ack
     mic_tcp_pdu ack;
     ack.header.ack=1;
+    ack.header.syn=0;
     ack.header.seq_num=PA;
     ack.header.source_port = 6500;
     ack.header.dest_port = tab_sock[socket].remote_addr.port;
@@ -307,28 +316,38 @@ void process_received_PDU(mic_tcp_pdu pdu, mic_tcp_ip_addr local_addr, mic_tcp_i
             app_buffer_put(pdu.payload);
         }
 
-    }else if(*state==SYN_RECEIVED && pdu.header.ack ){ //[PHASE DE CONNEXION] recep ACK
-        printf("[----------DEBUG------------] SEQ_NUM recep ack : %d | PA : %d\n", pdu.header.seq_num,PA);
-        *state=ESTABLISHED;
-        PE=(PE+1)%2;
+    }else if (pdu.header.ack && pdu.header.syn){ //SYNACK
+        printf("[Process_received_PDU] UN SYNACK ? DANS CETTE ECONOMIE ???\n");
+    }else if (pdu.header.ack){ //ACK
 
-    }else if(*state!=ESTABLISHED && pdu.header.syn){//[PHASE DE CONNEXION] recep SYN
-        *state=SYN_RECEIVED;
-        PE=pdu.header.seq_num;
-        printf("[----------DEBUG------------] SEQ_NUM : recep syn %d\n", pdu.header.seq_num);
-        PA=PE;
+        if(*state==SYN_RECEIVED){ //[PHASE DE CONNEXION] recep ACK
+            printf("[----------DEBUG------------] SEQ_NUM recep ack : %d | PA : %d\n", pdu.header.seq_num,PA);
+            *state=ESTABLISHED;
+            pthread_cond_signal(&ack_condition);
+            PA=(pdu.header.seq_num+1)%2;
+            PA=pdu.header.seq_num;
+        }
 
-        //Envoie SYN+ACK
-        mic_tcp_pdu synack;
-        synack.header.ack=1;
-        synack.header.seq_num=PE;
-        printf("[----------DEBUG------------] SEQ_NUM envoie synack : %d\n", synack.header.seq_num);
-        synack.header.syn=1;
-        synack.payload.data = malloc(8);
-        synack.payload.size = 8;
-        int size_sent = IP_send(synack,remote_addr);
-        if (size_sent==-1){perror("[MIC_TCP_ACCEPT] ERREUR SEND SYNACK");}
-        printf("[------------DEBUG----------] SYNACK ENVOYE !\n");
+    }else if (pdu.header.syn){ //SYN
+
+        if(*state==IDLE){//[PHASE DE CONNEXION] recep SYN
+            *state=SYN_RECEIVED;
+            pthread_cond_signal(&syn_condition);
+            PE=pdu.header.seq_num;
+            printf("[----------DEBUG------------] SEQ_NUM : recep syn %d\n", pdu.header.seq_num);
+            PA=PE;
+
+            //Envoie SYN+ACK
+            mic_tcp_pdu synack;
+            synack.header.ack=1;
+            synack.header.seq_num=PE;
+            printf("[----------DEBUG------------] SEQ_NUM envoie synack : %d\n", synack.header.seq_num);
+            synack.header.syn=1;
+            synack.payload.data = malloc(8);
+            synack.payload.size = 8;
+            int size_sent = IP_send(synack,remote_addr);
+            if (size_sent==-1){perror("[MIC_TCP_ACCEPT] ERREUR SEND SYNACK");}
+            printf("[------------DEBUG----------] SYNACK ENVOYE !\n");
+        }
     }
-    
 }
