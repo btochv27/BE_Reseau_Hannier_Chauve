@@ -7,6 +7,7 @@
 #define TAILLEF 10
 int compteur_socket;
 
+
 pthread_cond_t syn_condition;
 pthread_cond_t ack_condition;
 pthread_mutex_t wait_mutex;
@@ -19,6 +20,7 @@ int is_ini =0;
 
 
 float t_perte = 0.7;
+char wanted_rate[7];
 int index_f = 0;
 char fenetre [TAILLEF]; //retien les pdu envoyé ou non (sous forme vrai ou faux)
 
@@ -31,8 +33,13 @@ int mic_tcp_socket(start_mode sm)
 {
     if(is_ini ==0){
         pthread_mutex_init(&wait_mutex, NULL);
-        set_loss_rate(50);
-        printf("loss rate mis \n");
+        int loss_rate=50;
+        set_loss_rate(loss_rate);
+        printf("[INITIALISATION] Loss rate set to %d \n", loss_rate);
+        
+        printf("[INITIALISATION] Choisir valeur pour négociation des pertes : ");
+        scanf("%s",&wanted_rate);
+
         for (int i = 0; i <TAILLEF; i++){
             fenetre[i] = 1;
         }
@@ -126,10 +133,13 @@ int mic_tcp_connect(int socket, mic_tcp_sock_addr addr)
     printf("[------------DEBUG----------] SEQ_NUM envoie SYN : %d\n", syn.header.seq_num);
     syn.header.syn = 1;
     syn.header.ack = 0;
-    syn.header.source_port = 6500;
-    syn.header.dest_port = tab_sock[socket].remote_addr.port;
     syn.payload.data = malloc(8);
     syn.payload.size = 8;
+    syn.payload.data=wanted_rate;
+    printf("[------------DEBUG----------] DATA : %s", wanted_rate+'\0');
+    syn.header.source_port = 6500;
+    syn.header.dest_port = tab_sock[socket].remote_addr.port;
+    
 
     //Construction SYNACK
     mic_tcp_ip_addr* local_ip=malloc(sizeof(mic_tcp_ip_addr));
@@ -362,6 +372,15 @@ void process_received_PDU(mic_tcp_pdu pdu, mic_tcp_ip_addr local_addr, mic_tcp_i
             printf("[----------DEBUG------------] SEQ_NUM : recep syn %d\n", pdu.header.seq_num);
             PE=1000;
             PA=(pdu.header.seq_num+1);
+
+            //Negociation
+            int client_rate=atoi(pdu.payload.data);
+            int server_rate=atoi(wanted_rate);
+            if(client_rate<server_rate){
+                server_rate=client_rate;
+            }
+            t_perte=((float)server_rate)/100.0;
+            printf("[FIN DES NEGOCIATIONS] Choosen rate : %f\n", t_perte);
 
             //Envoie SYN+ACK
             mic_tcp_pdu synack;
