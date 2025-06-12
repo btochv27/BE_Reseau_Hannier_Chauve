@@ -1,89 +1,83 @@
-# BE RESEAU
-## TPs BE Reseau - 3 MIC
+# BE RESEAU INSA 3A-MIC 
 
-Les détails du sujet du BE est accessible depuis le cours "Programmation Système et Réseau" sur moodle.
+## Compilation
+
+    Entrez la commande:
+    
+        make
+
+    *Un warning s'affiche à la compilation, il est necessaire pour l'intéractivité de notre programme.*
+
+## Presentation générale du BE
+
+Ce bureau d'étude vise à implémenter une version Stop & Wait du protocole TCP, sur la base d'un core donné par les enseigants.
+
+## Versions et choix d'Implementation
+
+### v1
+La V1 permet un transfert simple d'information. On implémente une première version de toutes les fonctions que nous allons utiliser pendant le BE.
+
+1. Un tableau pour le stockage des sockets
+    Celui-ci nous a permis de garder les sockets nécessaires à portée de main dans une structure simple à manipuler.
+    Un emplacement socket est à -1 s'il n'est pas utilisé, sinon il est égal à sa position dans le tableau.
+
+2. La fonction mic_tcp_bind()
+    Elle vérifie que le port auquel on souhaite lier le socket ne soit pas déjà utilisé par un autre socket.
+    S'il est libre, elle le lie.
+
+3. mic_tcp_accept()
+    Le socket actif est mis en IDLE
+
+4. mic_tcp_connect()
+    On associe l'adresse distante du destinataire au socket.
+
+5. mic_tcp_send()
+    Création d'un PDU et envoie via IP_Send().
+
+6. mic_tcp_recv()
+    Creation d'un payload puis on boucle jusqu'a ce que app_buffer_get() recoive une info
+
+7. mic_tcp_close()
+    On repasse le socket en parametre a -1
+
+8. Process_receive_pdu()
+    app_buffer_put()
+
+### v2
+On ajoute une fiabilité totale via le mecanisme de Stop&Wait.
+
+1. mic_tcp_send()
+    Une boucle est ajoutée pour renvoyer le pdu tant qu'on a pas reçu un ack avec le bon numéro de séquence (ils alternent entre 0 ou 1 dans cette version). On utilise le timeout de la fonction IP_recv pour ne pas rester bloqué.
+
+2. process_receive_PDU()
+    A chaque reception on renvoie un pdu d'aquittement et on met à jour les numéros de séquence si le numéro de séquence recu est celui attendu. 
 
 
-## Contenu du dépôt « template » fourni
-Ce dépôt inclut le code source initial fourni pour démarrer le BE. Plus précisément : 
-  - README.md (ce fichier) qui notamment décrit la préparation de l’environnement de travail et le suivi des versions de votre travail; 
-  - tsock_texte et tsock_video : lanceurs pour les applications de test fournies. 
-  - dossier include : contenant les définitions des éléments fournis que vous aurez à manipuler dans le cadre du BE.
-  - dossier src : contenant l'implantation des éléments fournis et à compléter dans le cadre du BE.
-  - src/mictcp.c : fichier au sein duquel vous serez amenés à faire l'ensemble de vos contributions (hors bonus éventuels). 
+### v3
+On implemente une fiabilité partielle avec un pourcentage de perte fixe.
 
+Nous avons choisi d'utiliser une fenetre glissante via un tableau, si un pdu est envoyé la case actuelle est mise a 1, sinon a 0.
+En faisant la somme du tableau on peut connaitre le pourcentage de perte dans la fenetre.
+Cette méthode permet de ne pas reprendre des pertes occasionnelles et empeche qu'une vague de perte ne sois pas reprise (si tous les paquets  depuis le début de la connexion n'étaient pas perdus et qu'on calculait un pourcentage total par exemple).
 
-## Création du dépôt mictcp 
-
-1. Création d’un compte git étudiant : Si vous ne disposez pas d’un compte git, connectez vous sur http://github.com/ et créez un compte par binôme. 
-
-2. Afin d’être capable de mettre à jour le code que vous aurez produit sur le dépôt central Github, il vous faudra créer un jeton d’accès qui jouera le rôle de mot de passe. Veuillez le sauvegarder, car il vous le sera demandé lors de l'accès au dépôt central. Pour ce faire, veuillez suivre les étapes décrites : https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/creating-a-personal-access-token
-
-3. Création d’un dépôt Etudiant sur GitHub pour le BE Reseau
-  
-   Créer une copie du dépôt template enseignant : https://github.com/rezo-insat/mictcp, en vous y rendant et en cliquant sur le bouton « use this template » situé dans le coin en haut, plutôt à droite de la page. Il est demandé de le choisir comme dépôt privé. Il est impératif pour les corrections que vous rajoutiez le compte : rezo-insat comme collaborateur afin de permettre à vos enseignants d'accéder à votre dépôt. Pour ce faire, sélectionner le bouton "settings" puis "collaborators" et rajouter comme utilisateur : rezo-insat. La marche à suivre est décrite ci-après : https://docs.github.com/en/organizations/managing-access-to-your-organizations-repositories/adding-outside-collaborators-to-repositories-in-your-organization
-
-
-4. Créer un clone local de votre dépôt Github, i.e. une copie locale du dépôt sur votre compte insa. 
-  
-    cliquer sur le bouton « code » de votre dépôt, copier l’URL qui permet de l’identifier. 
-	Ouvrir un terminal de votre machine. En vous plaçant dans le répertoire de travail de votre choix, taper depuis le terminal :
-
-        git clone <url de votre dépôt>
-
-    Vous avez désormais une copie locale de votre dépôt, que vous pouvez mettre à jour et modifier à volonté au gré de votre avancement sur les TPs. 
-
-5. Afin de nous permettre d’avoir accès à votre dépôt, merci de bien vouloir renseigner l'URL de votre dépôt sur le fichier accessible depuis le lien "fichier URLs dépôts étudiants" se trouvant sur moodle (au niveau de la section: BE Reseau).
-
-## Compilation du protocole mictcp et lancement des applications de test fournies
-
-Pour compiler mictcp et générer les exécutables des applications de test depuis le code source fourni, taper :
-
-    make
-
-Deux applicatoins de test sont fournies, tsock_texte et tsock_video, elles peuvent être lancées soit en mode puits, soit en mode source selon la syntaxe suivante:
-
-    Usage: ./tsock_texte [-p|-s destination] port
-    Usage: ./tsock_video [[-p|-s] [-t (tcp|mictcp)]
-
-Seul tsock_video permet d'utiliser, au choix, votre protocole mictcp ou une émulation du comportement de tcp sur un réseau avec pertes.
-
-## Suivi de versions de votre travail
-
-Vous pouvez travailler comme vous le souhaitez sur le contenu du répertoire local. Vous pouvez mettre à jour les fichiers existants, rajouter d’autres ainsi que des dossiers et en retirer certains à votre guise. 
-
-Pour répercuter les changements que vous faites sur votre répertoire de travail local sur le dépôt central GitHub, sur votre terminal, taper :
+### v4
  
-    git add .
-    git commit -m «un message décrivant la mise à jour»
-    git push
+1. Implémentation de la phase de connexion et asynchronisme
 
-- Marquage des versions successives de votre travail sur mictcp 
- 
-Lorsque vous le souhaitez, git permet d'associer une étiquette à un état précis de votre dépôt par l'intermédiaires de tags. Il vous est par exemple possible d'utiliser ce mécanisme pour marquer (et par conséquence pouvoir retrouver) l'état de votre dépôt pour chacune des versions successives de votre travail sur mictcp.
+    Nous avons choisi de mettre les numéros de séquence dans la phase de connexion même si ceux-ci ne sont pas necessaires dans le cas ou le serveur ne se connecte qu'à 1 client.
+    La phase de connexion coté client est gérée de manière synchrone avec deux IP_send et un IP_recv.
+    La phase de connexion coté serveur est gérée asynchronement dans process_receive_PDU et mic_tcp_accept. La fonction mic_tcp_accept est bloquée à chaque étape par des variables de conditions et mutex en attendant que le changement de l'état de la connexion soit signalé par process_receive_PDU().
 
-Pour Créer un tag « v1 » et l'associer à l'état courrant de votre dépôt, vous taperez la commande suivante sur votre terminal :
+2. Negociation du taux de perte
 
-    git tag v1
+    L'utilisateur entre le pourcentage de reprise qu'il souhaite coté client, et celui maximal que le serveur est capable de d'accepter.
+    Le client envoie cette information dans le payload du SYN, si le serveur est capable d'accéder a la demande (taux de reprise pas trop élevé coté client), alors c'est le cas, sinon le serveur se met au max de ses capacités.
+    Nous avons choisi d'utiliser une interaction utilisateur pour la simplicité des tests du BE.
 
-Pour lister les tags existants au sein de votre dépôt
+## Discussion sur les performances de MIC_TCP_v4 , MIC_TCP_v2 et TCP
 
-    git tag -l
+TCP implémente une fiabilité totale, très utiles pour certains usages mais peut s'avérer lents pour des utilisations en temps réel par exemple.
+MIC_TCP_v2 a aussi une fiabilité totale, mais le mécanisme de stop&wait est très simple et le rend plus lent que TCP classique.
 
-Pour transférer les tags de votre dépôt local vers le dépôt central sur github:
+Concernant MIC_TCP_v4 il a l'avantage de ne pas considérer les pertes "acceptables". Dans le cas de la vidéo en temps réel par exemple s'il manque quelques images l'utilisateur n'en ressentira pas les conséquences, mais le cas d'un arret de l'image puis d'une acceleration lors de la récuperation de la connexion peu s'avérer génant. Le taux de reprise de MIC_TCP_v4 est negociable ce qui le rend utilisable dans de nombreux cas (même à 100%).
 
-    git push origin --tags
-
-
-Ceci permettra à votre enseignant de positionner le dépôt dans l'état ou il était au moment du marquage avec chacun des tags que vous définissez. 
-   
-## Suivi de votre avancement 
-
-Veuillez utiliser, à minima, un tag pour chacune des versions successives de mictcp qui sont définies au sein du sujet du BE disponible sous moodle.
-
-
-## Liens utiles 
-
-Aide pour la création d’un dépôt depuis un template : https://docs.github.com/en/repositories/creating-and-managing-repositories/creating-a-repository-from-a-template
-
-Manuel d'utilisation de git: https://git-scm.com/docs
